@@ -17,7 +17,7 @@ import java.util.Locale;
 @TeleOp
 public class Experimental1TeleOp extends LinearOpMode {
     //Initialize motors, servos, sensors, imus, etc.
-    DcMotorEx m1, m2, m3, m4, arm, extender5000;
+    DcMotorEx m1, m2, m3, m4, armLift, armExtender;
 //    Servo claw, wrist;
 
 
@@ -31,6 +31,8 @@ public class Experimental1TeleOp extends LinearOpMode {
         m2 = (DcMotorEx) hardwareMap.dcMotor.get("front_right");
         m3 = (DcMotorEx) hardwareMap.dcMotor.get("back_left");
         m4 = (DcMotorEx) hardwareMap.dcMotor.get("back_right");
+        armLift = (DcMotorEx) hardwareMap.dcMotor.get("arm_lift");
+        armExtender = (DcMotorEx) hardwareMap.dcMotor.get("arm_extender");
 
 
 
@@ -104,6 +106,22 @@ public class Experimental1TeleOp extends LinearOpMode {
             m2.setPower(p2);
             m3.setPower(p3);
             m4.setPower(p4);
+
+            if (gamepad1.left_trigger > 0){
+                armLift.setPower(gamepad1.left_trigger * -1);
+            } else if (gamepad1.right_trigger > 0){
+                armLift.setPower(gamepad1.right_trigger);
+            } else {
+                armLift.setPower(0);
+            }
+
+            if (gamepad1.right_bumper){
+                armExtender.setPower(-1);
+            } else if (gamepad1.left_bumper){
+                armExtender.setPower(1);
+            } else {
+                armExtender.setPower(0);
+            }
 
 
 
