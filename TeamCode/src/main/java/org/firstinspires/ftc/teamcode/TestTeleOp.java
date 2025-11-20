@@ -174,20 +174,21 @@ public class TestTeleOp extends LinearOpMode {
     }
 
     public double determineRotationDirection(double current, double target) {
+        double currentCircularHeading = getCircularHeading(current);
         double clockwiseDegrees;
         double counterclockwiseDegrees;
 
         // Determine the larger of the two angles
-        if (target > current) {
+        if (target > currentCircularHeading) {
             // Subtract the smaller current heading from the larger target heading
             //   to find the degrees needed to turn to get to the target going clockwise
-            clockwiseDegrees = target - current;
+            clockwiseDegrees = target - currentCircularHeading;
             // Find the alternative
             counterclockwiseDegrees = 360 - clockwiseDegrees;
         } else {
             // Subtract the smaller target heading from the larger current heading
             //   to find the degrees needed to turn to get to the target doing counterclockwise
-            counterclockwiseDegrees = current - target;
+            counterclockwiseDegrees = currentCircularHeading - target;
             // Find the alternative
             clockwiseDegrees = 360 - counterclockwiseDegrees;
         }
