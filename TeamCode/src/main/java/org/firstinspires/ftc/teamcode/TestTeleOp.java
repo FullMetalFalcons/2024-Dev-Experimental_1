@@ -5,7 +5,6 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
-import com.qualcomm.robotcore.hardware.Servo;
 
 @TeleOp
 public class TestTeleOp extends LinearOpMode {
@@ -92,12 +91,16 @@ public class TestTeleOp extends LinearOpMode {
             driver.update();
             headingRadians = -driver.getHeading();
 
-            telemetry.addData("Robot heading", Math.toDegrees(headingRadians));
+            telemetry.addData("Robot heading", getCircularHeading(Math.toDegrees(headingRadians)));
+            telemetry.addData("Calculated Free heading", joystickToHeading(gamepad1.right_stick_x, -gamepad1.right_stick_y));
 
             // Set the desired powers based on joystick inputs (-1 to 1)
             double desiredForward = -gamepad1.left_stick_y;
             double desiredStrafe = gamepad1.left_stick_x;
-            double powerAng = -gamepad1.right_stick_x;
+            double powerAng = 0.0;
+            if (gamepad1.right_stick_x != 0 || gamepad1.right_stick_y != 0) {
+                powerAng = 0.5 * determineRotationDirection(Math.toDegrees(headingRadians), joystickToHeading(gamepad1.right_stick_x, -gamepad1.right_stick_y));
+            }
 
             double powerForward = (desiredForward * Math.cos(headingRadians)) + (desiredStrafe * Math.sin(headingRadians));
             double powerStrafe = (desiredStrafe * Math.cos(headingRadians)) - (desiredForward * Math.sin(headingRadians));
@@ -135,6 +138,74 @@ public class TestTeleOp extends LinearOpMode {
 
 
         } // opModeActive loop ends
+    }
+
+    public double joystickToHeading(double X, double Y) {
+        double freeHeading = 0.0;
+        // If Y is zero, then the angle is purely horizontal
+        // Otherwise, the angle can be calculated with trig
+        if (Y == 0.0) {
+            // Determine which horizontal based on the sign on X
+            freeHeading = (X > 0.0) ? 90.0 : -90.0;
+        } else {
+            // Calculate the heading
+            freeHeading = Math.toDegrees(Math.atan(X/Y));
+        }
+        /*
+                                 With inverse tangent, (+X, +Y) and (-X, -Y) are indistinguishable
+     -45        0        45
+            I   |   II
+          -X,+Y | +X,+Y               inverse tangent accounts for quadrants I and II
+     270 -------|------- 90      but can't tell the different between those and quadrants III and IV
+          -X,-Y | +X,-Y
+           III  |   IV           so, if Y is negative (quad III or IV), then add 180 degrees to
+     225       180      135        the calculated angle
+
+        */
+        if (Y < 0.0) {
+            freeHeading += 180.0;
+        } else if (X < 0.0) {
+            // Add additional code for quad I to remove all negative values
+            freeHeading += 360;
+        }
+
+        // Return the final calculated heading
+        return freeHeading;
+    }
+
+    public double determineRotationDirection(double current, double target) {
+        double clockwiseDegrees;
+        double counterclockwiseDegrees;
+
+        // Determine the larger of the two angles
+        if (target > current) {
+            // Subtract the smaller current heading from the larger target heading
+            //   to find the degrees needed to turn to get to the target going clockwise
+            clockwiseDegrees = target - current;
+            // Find the alternative
+            counterclockwiseDegrees = 360 - clockwiseDegrees;
+        } else {
+            // Subtract the smaller target heading from the larger current heading
+            //   to find the degrees needed to turn to get to the target doing counterclockwise
+            counterclockwiseDegrees = current - target;
+            // Find the alternative
+            clockwiseDegrees = 360 - counterclockwiseDegrees;
+        }
+        // Determine the most efficient direction and return the proper multiplier
+        if (clockwiseDegrees > counterclockwiseDegrees) {
+            return 1.0;
+        } else {
+            return -1.0;
+        }
+    }
+
+    public double getCircularHeading(double actualHeading) {
+        // Mod the heading to make it between 0 and 360
+        double circularHeading = actualHeading % 360;
+
+        // Java's Mod function can return negative numbers, so account for that possibility
+        if (circularHeading < 0) circularHeading += 360;
+        return circularHeading;
     }
 
 } // end class
