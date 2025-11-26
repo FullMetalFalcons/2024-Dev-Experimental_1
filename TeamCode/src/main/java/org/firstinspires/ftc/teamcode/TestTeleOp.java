@@ -16,7 +16,24 @@ public class TestTeleOp extends LinearOpMode {
     double powerLB; //   be referenced in a function below
     double powerRF;
     double powerRB;
-    double desiredPower;
+
+    // Robot information storage
+    double xPosition;
+    double yPosition;
+
+    // Field position variables
+    /* Note that Meep Meep's field map has UP and RIGHT on the field being POSITIVE,
+     *   but the Pinpoint instructions say to make UP and LEFT on the field POSITIVE
+     *
+     * I'm going to define locations using the Meep Meep coordinate system
+     */
+    // Where the robot starts on the field
+    double STARTING_X = 0.0;
+    double STARTING_Y = 0.0;
+    // Where the goal is on the field
+    double GOAL_X = 0.0;
+    double GOAL_Y = 0.0;
+
 
     // Access MecanumDrive and PinpointDriver for drive wheel/heading information
     //public static MecanumDrive.Params DRIVE_PARAMS = new MecanumDrive.Params();
@@ -24,6 +41,27 @@ public class TestTeleOp extends LinearOpMode {
     public GoBildaPinpointDriver driver;
     public GoBildaPinpointDriver.EncoderDirection initialParDirection, initialPerpDirection;
     double headingRadians;
+    double desiredFreeHeading;
+
+    // Custom class to store information about the robot's target heading
+    public class TargetHeading {
+        private double direction;
+        private double error;
+
+        public TargetHeading(double direction, double error) {
+            this.direction = direction;
+            this.error = error;
+        }
+
+        public double getDirection() {
+            return  direction;
+        }
+        public double getError() {
+            return error;
+        }
+    } // End class
+
+    public TargetHeading targetHeading;
 
 
     // The following code will run as soon as "INIT" is pressed on the Driver Station
@@ -34,15 +72,14 @@ public class TestTeleOp extends LinearOpMode {
         /*
         double mmPerTick = 25.4 * 122.5/62288;
         driver.setEncoderResolution(1 / mmPerTick);
-        driver.setOffsets(0, 0); // TODO:  Set actual offsets, in mm
         */
 
         // TODO: reverse encoder directions if needed
         // Forward and Left are both positive
-        initialParDirection = GoBildaPinpointDriver.EncoderDirection.FORWARD;
+        initialParDirection = GoBildaPinpointDriver.EncoderDirection.REVERSED;
         initialPerpDirection = GoBildaPinpointDriver.EncoderDirection.FORWARD;
         driver.setEncoderDirections(initialParDirection, initialPerpDirection);
-
+        driver.setOffsets(-90.0, -50.0);   // -X is to the right. -Y is to the back. Everything is in mm
         driver.resetPosAndIMU();
 
         // Define drive motors
@@ -90,16 +127,29 @@ public class TestTeleOp extends LinearOpMode {
             // Get heading of the robot from pinpoint driver
             driver.update();
             headingRadians = -driver.getHeading();
+            // Note that Meep Meep has Y as up/down and X as left/right, but Pinpoint has Y as left/right and X as up/down
+            // The variables xPosition and yPosition will be in terms of Meep Meep, so swap the locations of .getPosX() and .getPosY()
+            xPosition = STARTING_X - driver.getPosY();
+            yPosition = STARTING_Y + driver.getPosX(); // Note that Meep Meep has RIGHT as POSITIVE Y but Pinpoint has RIGHT as NEGATIVE Y
+                                                        // The variable yPosition will be in terms of Meep Meep, but .getPosY() is in terms of Pinpoint
+                                                        //     thus, we invert .getPosY() when setting the robot's stored position
 
             telemetry.addData("Robot heading", getCircularHeading(Math.toDegrees(headingRadians)));
-            telemetry.addData("Calculated Free heading", joystickToHeading(gamepad1.right_stick_x, -gamepad1.right_stick_y));
+            telemetry.addData("Desired heading", desiredFreeHeading);
+            telemetry.addData("X", xPosition);
+            telemetry.addData("Y", yPosition);
 
             // Set the desired powers based on joystick inputs (-1 to 1)
             double desiredForward = -gamepad1.left_stick_y;
             double desiredStrafe = gamepad1.left_stick_x;
-            double powerAng = 0.0;
-            if (gamepad1.right_stick_x != 0 || gamepad1.right_stick_y != 0) {
-                powerAng = 0.5 * determineRotationDirection(Math.toDegrees(headingRadians), joystickToHeading(gamepad1.right_stick_x, -gamepad1.right_stick_y));
+            double powerAng;
+            if (gamepad1.a) {
+                // Set target heading based on the goal and its position compared to the robot
+                desiredFreeHeading = ratioOfSidesToHeading(GOAL_X-xPosition,GOAL_Y-yPosition);
+                targetHeading = determineRotationDirection(Math.toDegrees(headingRadians), desiredFreeHeading);
+                powerAng = targetHeading.getDirection() * targetHeading.getError()/45.0;
+            } else {
+                powerAng = -gamepad1.right_stick_x;
             }
 
             double powerForward = (desiredForward * Math.cos(headingRadians)) + (desiredStrafe * Math.sin(headingRadians));
@@ -140,7 +190,7 @@ public class TestTeleOp extends LinearOpMode {
         } // opModeActive loop ends
     }
 
-    public double joystickToHeading(double X, double Y) {
+    public double ratioOfSidesToHeading(double X, double Y) {
         double freeHeading = 0.0;
         // If Y is zero, then the angle is purely horizontal
         // Otherwise, the angle can be calculated with trig
@@ -173,7 +223,7 @@ public class TestTeleOp extends LinearOpMode {
         return freeHeading;
     }
 
-    public double determineRotationDirection(double current, double target) {
+    public TargetHeading determineRotationDirection(double current, double target) {
         double currentCircularHeading = getCircularHeading(current);
         double clockwiseDegrees;
         double counterclockwiseDegrees;
@@ -193,10 +243,10 @@ public class TestTeleOp extends LinearOpMode {
             clockwiseDegrees = 360 - counterclockwiseDegrees;
         }
         // Determine the most efficient direction and return the proper multiplier
-        if (clockwiseDegrees > counterclockwiseDegrees) {
-            return 1.0;
+        if (clockwiseDegrees < counterclockwiseDegrees) {
+            return new TargetHeading(-1.0, Math.abs(clockwiseDegrees));
         } else {
-            return -1.0;
+            return new TargetHeading(1.0, Math.abs(counterclockwiseDegrees));
         }
     }
 
