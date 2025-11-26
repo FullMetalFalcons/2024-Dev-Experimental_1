@@ -128,11 +128,12 @@ public class TestTeleOp extends LinearOpMode {
             driver.update();
             headingRadians = -driver.getHeading();
             // Note that Meep Meep has Y as up/down and X as left/right, but Pinpoint has Y as left/right and X as up/down
-            // The variables xPosition and yPosition will be in terms of Meep Meep, so swap the locations of .getPosX() and .getPosY()
-            xPosition = STARTING_X - driver.getPosY();
-            yPosition = STARTING_Y + driver.getPosX(); // Note that Meep Meep has RIGHT as POSITIVE Y but Pinpoint has RIGHT as NEGATIVE Y
-                                                        // The variable yPosition will be in terms of Meep Meep, but .getPosY() is in terms of Pinpoint
-                                                        //     thus, we invert .getPosY() when setting the robot's stored position
+            //   The variables xPosition and yPosition will be in terms of Meep Meep, so swap the locations of .getPosX() and .getPosY()
+            // Also divide by 25.4 to convert from mm to in
+            xPosition = STARTING_X - (driver.getPosY() / 25.4);
+            yPosition = STARTING_Y + (driver.getPosX() / 25.4); // Note that Meep Meep has RIGHT as POSITIVE Y but Pinpoint has RIGHT as NEGATIVE Y
+                                                                // The variable yPosition will be in terms of Meep Meep, but .getPosY() is in terms of Pinpoint
+                                                                //     thus, we invert .getPosY() when setting the robot's stored position
 
             telemetry.addData("Robot heading", getCircularHeading(Math.toDegrees(headingRadians)));
             telemetry.addData("Desired heading", desiredFreeHeading);
