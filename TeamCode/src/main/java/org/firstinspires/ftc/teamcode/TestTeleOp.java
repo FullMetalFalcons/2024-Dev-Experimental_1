@@ -1,10 +1,17 @@
 package org.firstinspires.ftc.teamcode;
 
+// TeleOp-related imports
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.I2cDeviceSynchSimple;
+
+// Pinpoint-related imports
+import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 
 @TeleOp
 public class TestTeleOp extends LinearOpMode {
@@ -20,6 +27,7 @@ public class TestTeleOp extends LinearOpMode {
     // Robot information storage
     double xPosition;
     double yPosition;
+    Pose2D robotPos;
 
     // Field position variables
     /* Note that Meep Meep's field map has UP and RIGHT on the field being POSITIVE,
@@ -28,36 +36,59 @@ public class TestTeleOp extends LinearOpMode {
      * I'm going to define locations using the Meep Meep coordinate system
      */
     // Where the robot starts on the field
-    double STARTING_X = 0.0;
-    double STARTING_Y = 0.0;
+    double STARTING_X_IN = 0.0;
+    double STARTING_Y_IN = 0.0;
     // Where the goal is on the field
-    double GOAL_X = 0.0;
-    double GOAL_Y = 0.0;
+    double GOAL_X_IN = 0.0;
+    double GOAL_Y_IN = 0.0;
 
 
     // Access MecanumDrive and PinpointDriver for drive wheel/heading information
     //public static MecanumDrive.Params DRIVE_PARAMS = new MecanumDrive.Params();
 
-    public GoBildaPinpointDriver driver;
+    public MeepMeepBasedDriver driver;
     public GoBildaPinpointDriver.EncoderDirection initialParDirection, initialPerpDirection;
     double headingRadians;
     double desiredFreeHeading;
 
     // Custom class to store information about the robot's target heading
     public class TargetHeading {
+        // Instance variables
         private double direction;
-        private double error;
+        private double errorDegrees;
 
-        public TargetHeading(double direction, double error) {
+        // Constructor
+        public TargetHeading(double direction, double errorDegrees) {
             this.direction = direction;
-            this.error = error;
+            this.errorDegrees = errorDegrees;
         }
 
+        // Accessor methods
         public double getDirection() {
-            return  direction;
+            return direction;
         }
         public double getError() {
-            return error;
+            return errorDegrees;
+        }
+    } // End class
+
+    // Custom class to convert between Pinpoint and Meep Meep's coordinate systems
+    public class MeepMeepBasedDriver extends GoBildaPinpointDriver {
+
+        // Constructor
+        public MeepMeepBasedDriver(I2cDeviceSynchSimple deviceClient, boolean deviceClientIsOwned) {
+            super(deviceClient, deviceClientIsOwned);
+        }
+
+        // Return a modified Pose2D in Meep Meep's coordinate system, assuming a Pose2D is passed in directly form Pinpoint
+        public Pose2D getMeepMeepPosition() {
+            Pose2D pinPos = getPosition();
+            return new Pose2D(
+                    DistanceUnit.INCH,
+                    -pinPos.getY(DistanceUnit.INCH), // This parameter is for Meep Meep's X (strafe) which is Pinpoint's -Y
+                    pinPos.getX(DistanceUnit.INCH), // This parameter is for Meep Meep's Y (forwards) which is Pinpoint's X
+                    AngleUnit.RADIANS,
+                    pinPos.getHeading(AngleUnit.RADIANS));
         }
     } // End class
 
@@ -67,7 +98,7 @@ public class TestTeleOp extends LinearOpMode {
     // The following code will run as soon as "INIT" is pressed on the Driver Station
     public void runOpMode() {
         // Setup pinpoint driver
-        driver = hardwareMap.get(GoBildaPinpointDriver.class, "pinpoint");
+        driver = hardwareMap.get(MeepMeepBasedDriver.class, "pinpoint");
 
         /*
         double mmPerTick = 25.4 * 122.5/62288;
@@ -80,7 +111,7 @@ public class TestTeleOp extends LinearOpMode {
         initialPerpDirection = GoBildaPinpointDriver.EncoderDirection.FORWARD;
         driver.setEncoderDirections(initialParDirection, initialPerpDirection);
         driver.setOffsets(-90.0, -50.0);   // -X is to the right. -Y is to the back. Everything is in mm
-        driver.resetPosAndIMU();
+        driver.resetPosAndIMU(); // TODO: Don't reset if coming directly from Autonomous
 
         // Define drive motors
         //The string should be the name on the Driver Hub
@@ -126,14 +157,11 @@ public class TestTeleOp extends LinearOpMode {
             // Field centric drive code
             // Get heading of the robot from pinpoint driver
             driver.update();
-            headingRadians = -driver.getHeading();
-            // Note that Meep Meep has Y as up/down and X as left/right, but Pinpoint has Y as left/right and X as up/down
-            //   The variables xPosition and yPosition will be in terms of Meep Meep, so swap the locations of .getPosX() and .getPosY()
-            // Also divide by 25.4 to convert from mm to in
-            xPosition = STARTING_X - (driver.getPosY() / 25.4);
-            yPosition = STARTING_Y + (driver.getPosX() / 25.4); // Note that Meep Meep has RIGHT as POSITIVE Y but Pinpoint has RIGHT as NEGATIVE Y
-                                                                // The variable yPosition will be in terms of Meep Meep, but .getPosY() is in terms of Pinpoint
-                                                                //     thus, we invert .getPosY() when setting the robot's stored position
+            robotPos = driver.getMeepMeepPosition();
+
+            headingRadians = -robotPos.getHeading(AngleUnit.RADIANS);
+            xPosition = STARTING_X_IN + (robotPos.getX(DistanceUnit.INCH));
+            yPosition = STARTING_Y_IN + (robotPos.getY(DistanceUnit.INCH));
 
             telemetry.addData("Robot heading", getCircularHeading(Math.toDegrees(headingRadians)));
             telemetry.addData("Desired heading", desiredFreeHeading);
@@ -146,7 +174,7 @@ public class TestTeleOp extends LinearOpMode {
             double powerAng;
             if (gamepad1.a) {
                 // Set target heading based on the goal and its position compared to the robot
-                desiredFreeHeading = ratioOfSidesToHeading(GOAL_X-xPosition,GOAL_Y-yPosition);
+                desiredFreeHeading = ratioOfSidesToHeading(GOAL_X_IN - xPosition, GOAL_Y_IN - yPosition);
                 targetHeading = determineRotationDirection(Math.toDegrees(headingRadians), desiredFreeHeading);
                 powerAng = targetHeading.getDirection() * targetHeading.getError()/45.0;
             } else {
@@ -204,7 +232,7 @@ public class TestTeleOp extends LinearOpMode {
         }
         /*
                                  With inverse tangent, (+X, +Y) and (-X, -Y) are indistinguishable
-     -45        0        45
+     325        0        45
             I   |   II
           -X,+Y | +X,+Y               inverse tangent accounts for quadrants I and II
      270 -------|------- 90      but can't tell the different between those and quadrants III and IV
