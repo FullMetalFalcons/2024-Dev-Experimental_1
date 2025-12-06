@@ -7,6 +7,8 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.I2cDeviceSynchSimple;
+import com.qualcomm.robotcore.hardware.configuration.annotations.DeviceProperties;
+import com.qualcomm.robotcore.hardware.configuration.annotations.I2cDeviceType;
 
 // Pinpoint-related imports
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
@@ -36,11 +38,11 @@ public class TestTeleOp extends LinearOpMode {
      * I'm going to define locations using the Meep Meep coordinate system
      */
     // Where the robot starts on the field
-    double STARTING_X_IN = 0.0;
-    double STARTING_Y_IN = 0.0;
+    Pose2D startingPos = new Pose2D(DistanceUnit.INCH, -60.0, -12.0,
+                                    AngleUnit.DEGREES, -90.0);
     // Where the goal is on the field
-    double GOAL_X_IN = 0.0;
-    double GOAL_Y_IN = 0.0;
+    Pose2D goalPos = new Pose2D(DistanceUnit.INCH, -60.0, 60.0,
+                                    AngleUnit.DEGREES, 0.0);
 
 
     // Access MecanumDrive and PinpointDriver for drive wheel/heading information
@@ -49,6 +51,7 @@ public class TestTeleOp extends LinearOpMode {
     public MeepMeepBasedDriver driver;
     public GoBildaPinpointDriver.EncoderDirection initialParDirection, initialPerpDirection;
     double headingRadians;
+    double headingFieldCentric;
     double desiredFreeHeading;
 
     // Custom class to store information about the robot's target heading
@@ -72,25 +75,32 @@ public class TestTeleOp extends LinearOpMode {
         }
     } // End class
 
-    // Custom class to convert between Pinpoint and Meep Meep's coordinate systems
-    public class MeepMeepBasedDriver extends GoBildaPinpointDriver {
-
-        // Constructor
-        public MeepMeepBasedDriver(I2cDeviceSynchSimple deviceClient, boolean deviceClientIsOwned) {
-            super(deviceClient, deviceClientIsOwned);
-        }
-
-        // Return a modified Pose2D in Meep Meep's coordinate system, assuming a Pose2D is passed in directly form Pinpoint
-        public Pose2D getMeepMeepPosition() {
-            Pose2D pinPos = getPosition();
-            return new Pose2D(
-                    DistanceUnit.INCH,
-                    -pinPos.getY(DistanceUnit.INCH), // This parameter is for Meep Meep's X (strafe) which is Pinpoint's -Y
-                    pinPos.getX(DistanceUnit.INCH), // This parameter is for Meep Meep's Y (forwards) which is Pinpoint's X
-                    AngleUnit.RADIANS,
-                    pinPos.getHeading(AngleUnit.RADIANS));
-        }
-    } // End class
+//    @I2cDeviceType
+//    @DeviceProperties(
+//            name = "goBILDA® Pinpoint Meep Meep Based",
+//            xmlTag = "goBILDAPinpointMeepMeep",
+//            description ="goBILDA® Pinpoint Odometry Computer (IMU Sensor Fusion for 2 Wheel Odometry)"
+//    )
+//
+//    // Custom class to convert between Pinpoint and Meep Meep's coordinate systems
+//    public class MeepMeepBasedDriver extends GoBildaPinpointDriver {
+//
+//        // Constructor
+//        public MeepMeepBasedDriver(I2cDeviceSynchSimple deviceClient, boolean deviceClientIsOwned) {
+//            super(deviceClient, deviceClientIsOwned);
+//        }
+//
+//        // Return a modified Pose2D in Meep Meep's coordinate system, assuming a Pose2D is passed in directly form Pinpoint
+//        public Pose2D getMeepMeepPosition() {
+//            Pose2D pinPos = getPosition();
+//            return new Pose2D(
+//                    DistanceUnit.INCH,
+//                    -pinPos.getY(DistanceUnit.INCH), // This parameter is for Meep Meep's X (strafe) which is Pinpoint's -Y
+//                    pinPos.getX(DistanceUnit.INCH), // This parameter is for Meep Meep's Y (forwards) which is Pinpoint's X
+//                    AngleUnit.RADIANS,
+//                    pinPos.getHeading(AngleUnit.RADIANS));
+//        }
+//    } // End class
 
     public TargetHeading targetHeading;
 
@@ -111,7 +121,8 @@ public class TestTeleOp extends LinearOpMode {
         initialPerpDirection = GoBildaPinpointDriver.EncoderDirection.FORWARD;
         driver.setEncoderDirections(initialParDirection, initialPerpDirection);
         driver.setOffsets(-90.0, -50.0);   // -X is to the right. -Y is to the back. Everything is in mm
-        driver.resetPosAndIMU(); // TODO: Don't reset if coming directly from Autonomous
+        //driver.resetPosAndIMU(); // TODO: Don't reset if coming directly from Autonomous
+        driver.setMeepMeepPosition(startingPos);
 
         // Define drive motors
         //The string should be the name on the Driver Hub
@@ -160,8 +171,9 @@ public class TestTeleOp extends LinearOpMode {
             robotPos = driver.getMeepMeepPosition();
 
             headingRadians = -robotPos.getHeading(AngleUnit.RADIANS);
-            xPosition = STARTING_X_IN + (robotPos.getX(DistanceUnit.INCH));
-            yPosition = STARTING_Y_IN + (robotPos.getY(DistanceUnit.INCH));
+            headingFieldCentric = headingRadians - startingPos.getHeading(AngleUnit.RADIANS);
+            xPosition = robotPos.getX(DistanceUnit.INCH);
+            yPosition = robotPos.getY(DistanceUnit.INCH);
 
             telemetry.addData("Robot heading", getCircularHeading(Math.toDegrees(headingRadians)));
             telemetry.addData("Desired heading", desiredFreeHeading);
@@ -174,15 +186,16 @@ public class TestTeleOp extends LinearOpMode {
             double powerAng;
             if (gamepad1.a) {
                 // Set target heading based on the goal and its position compared to the robot
-                desiredFreeHeading = ratioOfSidesToHeading(GOAL_X_IN - xPosition, GOAL_Y_IN - yPosition);
+                desiredFreeHeading = ratioOfSidesToHeading(goalPos.getX(DistanceUnit.INCH) - xPosition,
+                                                           goalPos.getY(DistanceUnit.INCH) - yPosition);
                 targetHeading = determineRotationDirection(Math.toDegrees(headingRadians), desiredFreeHeading);
-                powerAng = targetHeading.getDirection() * targetHeading.getError()/45.0;
+                powerAng = targetHeading.getDirection() * targetHeading.getError()/30.0;
             } else {
                 powerAng = -gamepad1.right_stick_x;
             }
 
-            double powerForward = (desiredForward * Math.cos(headingRadians)) + (desiredStrafe * Math.sin(headingRadians));
-            double powerStrafe = (desiredStrafe * Math.cos(headingRadians)) - (desiredForward * Math.sin(headingRadians));
+            double powerForward = (desiredForward * Math.cos(headingFieldCentric)) + (desiredStrafe * Math.sin(headingFieldCentric));
+            double powerStrafe = (desiredStrafe * Math.cos(headingFieldCentric)) - (desiredForward * Math.sin(headingFieldCentric));
 
             // Perform vector math to determine the desired powers for each wheel
             powerLF = powerStrafe + powerForward - powerAng;
