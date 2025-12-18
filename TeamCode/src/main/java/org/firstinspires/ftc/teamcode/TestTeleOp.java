@@ -6,9 +6,6 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
-import com.qualcomm.robotcore.hardware.I2cDeviceSynchSimple;
-import com.qualcomm.robotcore.hardware.configuration.annotations.DeviceProperties;
-import com.qualcomm.robotcore.hardware.configuration.annotations.I2cDeviceType;
 
 // Pinpoint-related imports
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
@@ -38,11 +35,17 @@ public class TestTeleOp extends LinearOpMode {
      * I'm going to define locations using the Meep Meep coordinate system
      */
     // Where the robot starts on the field
-    Pose2D startingPos = new Pose2D(DistanceUnit.INCH, -60.0, -12.0,
-                                    AngleUnit.DEGREES, -90.0);
+    Pose2D startingPos = new Pose2D(DistanceUnit.INCH, 60.0, -12.0,
+                                    AngleUnit.DEGREES, 90.0);
     // Where the goal is on the field
     Pose2D goalPos = new Pose2D(DistanceUnit.INCH, -60.0, 60.0,
                                     AngleUnit.DEGREES, 0.0);
+
+    // Autonomous code
+    Pose2D targetPos = new Pose2D(DistanceUnit.INCH, 0, -48,
+            AngleUnit.DEGREES, 45);
+    PIDLoop forwardPID = new PIDLoop(0.1,0,0.02);
+    PIDLoop strafePID = new PIDLoop(0.1,0,0.02);
 
 
     // Access MecanumDrive and PinpointDriver for drive wheel/heading information
@@ -171,11 +174,12 @@ public class TestTeleOp extends LinearOpMode {
             robotPos = driver.getMeepMeepPosition();
 
             headingRadians = -robotPos.getHeading(AngleUnit.RADIANS);
-            headingFieldCentric = headingRadians - startingPos.getHeading(AngleUnit.RADIANS);
+            headingFieldCentric = headingRadians + startingPos.getHeading(AngleUnit.RADIANS);
             xPosition = robotPos.getX(DistanceUnit.INCH);
             yPosition = robotPos.getY(DistanceUnit.INCH);
 
             telemetry.addData("Robot heading", getCircularHeading(Math.toDegrees(headingRadians)));
+            telemetry.addData("Relative heading", Math.toDegrees(headingFieldCentric));
             telemetry.addData("Desired heading", desiredFreeHeading);
             telemetry.addData("X", xPosition);
             telemetry.addData("Y", yPosition);
@@ -196,6 +200,16 @@ public class TestTeleOp extends LinearOpMode {
 
             double powerForward = (desiredForward * Math.cos(headingFieldCentric)) + (desiredStrafe * Math.sin(headingFieldCentric));
             double powerStrafe = (desiredStrafe * Math.cos(headingFieldCentric)) - (desiredForward * Math.sin(headingFieldCentric));
+
+            if (gamepad1.y) {
+                desiredStrafe = forwardPID.calculatePower(targetPos.getX(DistanceUnit.INCH) - xPosition);
+                desiredForward = strafePID.calculatePower(targetPos.getY(DistanceUnit.INCH) - yPosition);
+
+                powerForward = (desiredForward * Math.cos(headingRadians)) + (desiredStrafe * Math.sin(headingRadians));
+                powerStrafe = (desiredStrafe * Math.cos(headingRadians)) - (desiredForward * Math.sin(headingRadians));
+                targetHeading = determineRotationDirection(Math.toDegrees(headingRadians), targetPos.getHeading(AngleUnit.DEGREES));
+                powerAng = targetHeading.getDirection() * targetHeading.getError()/30.0;
+            }
 
             // Perform vector math to determine the desired powers for each wheel
             powerLF = powerStrafe + powerForward - powerAng;
@@ -267,20 +281,21 @@ public class TestTeleOp extends LinearOpMode {
 
     public TargetHeading determineRotationDirection(double current, double target) {
         double currentCircularHeading = getCircularHeading(current);
+        double targetHeading = getCircularHeading(target);
         double clockwiseDegrees;
         double counterclockwiseDegrees;
 
         // Determine the larger of the two angles
-        if (target > currentCircularHeading) {
+        if (targetHeading > currentCircularHeading) {
             // Subtract the smaller current heading from the larger target heading
             //   to find the degrees needed to turn to get to the target going clockwise
-            clockwiseDegrees = target - currentCircularHeading;
+            clockwiseDegrees = targetHeading - currentCircularHeading;
             // Find the alternative
             counterclockwiseDegrees = 360 - clockwiseDegrees;
         } else {
             // Subtract the smaller target heading from the larger current heading
             //   to find the degrees needed to turn to get to the target doing counterclockwise
-            counterclockwiseDegrees = currentCircularHeading - target;
+            counterclockwiseDegrees = currentCircularHeading - targetHeading;
             // Find the alternative
             clockwiseDegrees = 360 - counterclockwiseDegrees;
         }
