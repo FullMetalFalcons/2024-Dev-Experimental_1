@@ -285,15 +285,15 @@ public class TestTeleOp extends LinearOpMode {
         double clockwiseDegrees;
         double counterclockwiseDegrees;
 
-        // Determine the larger of the two angles
+        // Determine the larger of the two headings
         if (targetHeading > currentCircularHeading) {
-            // Subtract the smaller current heading from the larger target heading
+            // Subtract the smaller (current) heading from the larger (target) heading
             //   to find the degrees needed to turn to get to the target going clockwise
             clockwiseDegrees = targetHeading - currentCircularHeading;
             // Find the alternative
             counterclockwiseDegrees = 360 - clockwiseDegrees;
         } else {
-            // Subtract the smaller target heading from the larger current heading
+            // Subtract the smaller (target) heading from the larger (current) heading
             //   to find the degrees needed to turn to get to the target doing counterclockwise
             counterclockwiseDegrees = currentCircularHeading - targetHeading;
             // Find the alternative
