@@ -36,12 +36,19 @@ public class MeepMeepBasedDriver extends GoBildaPinpointDriver {
                 AngleUnit.RADIANS,
                 pinPos.getHeading(AngleUnit.RADIANS));
     }
-
+    /*    Pinpoint:    (+X)               Meep Meep:   (+Y)
+                        |                               |
+                        |                               |
+           (+Y) --------|------- (-Y)      (-X) --------|------- (+X)
+                        |                               |
+                        |                               |
+                       (-X)                            (-Y)
+    */
     public void setMeepMeepPosition(Pose2D meepPos) {
         Pose2D pinPos = new Pose2D(
                 DistanceUnit.MM,
-                meepPos.getY(DistanceUnit.MM),
-                -meepPos.getX(DistanceUnit.MM),
+                meepPos.getY(DistanceUnit.MM), // This parameter is for Pinpoint's X (forwards) which is Meep Meep's Y
+                -meepPos.getX(DistanceUnit.MM), // This parameter is for Pinpoint's Y (strafe) which is Meep Meep's -X
                 AngleUnit.RADIANS,
                 meepPos.getHeading(AngleUnit.RADIANS));
         setPosition(pinPos);
